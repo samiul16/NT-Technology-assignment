@@ -1,14 +1,14 @@
 import { create } from "zustand";
 import { Task, ColumnType } from "@/types/task";
-import { supabase } from "@/lib/supabase";
 import Cookies from "js-cookie";
 
 interface TaskState {
   tasks: Task[];
   notification: string | null;
+  searchQuery: string;
 
   setNotification: (msg: string | null) => void;
-
+  setSearchQuery: (query: string) => void;
   fetchTasks: () => Promise<void>;
 
   moveTask: (
@@ -26,159 +26,177 @@ interface TaskState {
   ) => Promise<void>;
 
   addTask: (data: Task, userName: string) => Promise<void>;
-
-  searchQuery: string;
-
-  setSearchQuery: (query: string) => void;
-
   initRealtime: () => void;
 }
 
-let isRealtimeInitialized = false;
+type ApiTask = {
+  id: string;
+  title: string;
+  description: string | null;
+  status: "TODO" | "IN_PROGRESS" | "DONE";
+  priority: "LOW" | "MEDIUM" | "HIGH";
+  due_date: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type ApiResponse<T> = {
+  success: boolean;
+  data?: T;
+  message?: string;
+};
+
+const toApiStatus = (status: ColumnType): ApiTask["status"] => {
+  const statuses: Record<ColumnType, ApiTask["status"]> = {
+    todo: "TODO",
+    inprogress: "IN_PROGRESS",
+    done: "DONE",
+  };
+
+  return statuses[status];
+};
+
+const toFrontendTask = (task: ApiTask): Task =>
+  ({
+    ...task,
+    status: (
+      {
+        TODO: "todo",
+        IN_PROGRESS: "inprogress",
+        DONE: "done",
+      } as const
+    )[task.status],
+    description: task.description ?? "",
+    order_index: 0,
+  } as Task);
+
+async function readResponse<T>(response: Response): Promise<T> {
+  const result = (await response.json()) as ApiResponse<T>;
+
+  if (!response.ok || !result.success || result.data === undefined) {
+    throw new Error(result.message ?? "Task request failed");
+  }
+
+  return result.data;
+}
 
 export const useTaskStore = create<TaskState>((set, get) => ({
   tasks: [],
   notification: null,
-
   searchQuery: "",
-
-  setSearchQuery: (query) => set({ searchQuery: query }),
 
   setNotification: (msg) => set({ notification: msg }),
 
-  initRealtime: () => {
-    if (isRealtimeInitialized) return;
-
-    isRealtimeInitialized = true;
-
-    // -------------------------
-    // Broadcast Channel
-    // -------------------------
-
-    const notificationChannel = supabase.channel("board-notifications");
-
-    notificationChannel
-      .on("broadcast", { event: "task-moved" }, ({ payload }) => {
-        const currentUser = Cookies.get("user-auth");
-
-        const user = currentUser ? JSON.parse(currentUser) : null;
-
-        const currentUserName = user?.name;
-
-        // Ignore own message
-        if (payload.sender === currentUserName) return;
-
-        set({
-          notification: payload.message,
-        });
-      })
-      .subscribe();
-
-    // -------------------------
-    // Database Changes
-    // -------------------------
-
-    const dbChannel = supabase.channel("tasks-db-changes");
-
-    dbChannel
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "tasks",
-        },
-        async () => {
-          const { data } = await supabase.from("tasks").select("*");
-
-          set({
-            tasks: data || [],
-          });
-        }
-      )
-      .subscribe();
-  },
-
-  // -------------------------
-  // API Calls
-  // -------------------------
+  setSearchQuery: (query) => set({ searchQuery: query }),
 
   fetchTasks: async () => {
-    const res = await fetch("/api/tasks");
+    try {
+      const response = await fetch("/api/tasks");
+      const apiTasks = await readResponse<ApiTask[]>(response);
 
-    console.log("response ", res);
-
-    const data = (await res.json()) || [];
-
-    set({ tasks: data });
+      set({ tasks: apiTasks.map(toFrontendTask) });
+    } catch (error) {
+      console.error("Failed to fetch tasks:", error);
+      set({ notification: "Could not load tasks." });
+    }
   },
 
-  moveTask: async (taskId, newStatus, newOrder, userName) => {
-    const previousTasks = get().tasks;
-
-    const optimisticallyUpdatedTasks = previousTasks.map((task) =>
-      task.id === taskId
-        ? { ...task, status: newStatus, order_index: newOrder }
-        : task
-    );
-
-    set({ tasks: optimisticallyUpdatedTasks });
-
+  addTask: async (data, _userName) => {
     try {
-      const res = await fetch("/api/tasks/move", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
+      const response = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          taskId,
-          newStatus,
-          newOrder,
-          userName,
+          title: data.title,
+          description: data.description || null,
+          status: toApiStatus(data.status),
+          priority: "MEDIUM",
         }),
       });
 
-      if (!res.ok) {
-        throw new Error("Failed to move task on server");
-      }
+      const createdTask = await readResponse<ApiTask>(response);
+
+      set((state) => ({
+        tasks: [...state.tasks, toFrontendTask(createdTask)],
+        notification: null,
+      }));
     } catch (error) {
-      console.error("Move task failed:", error);
+      console.error("Failed to create task:", error);
+      set({ notification: "Could not create task." });
+      throw error;
+    }
+  },
+
+  moveTask: async (taskId, newStatus, _newOrder, _userName) => {
+    const previousTasks = get().tasks;
+
+    set({
+      tasks: previousTasks.map((task) =>
+        task.id === taskId ? { ...task, status: newStatus } : task
+      ),
+    });
+
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: toApiStatus(newStatus),
+        }),
+      });
+
+      const updatedTask = await readResponse<ApiTask>(response);
+
+      set((state) => ({
+        tasks: state.tasks.map((task) =>
+          task.id === taskId ? toFrontendTask(updatedTask) : task
+        ),
+        notification: null,
+      }));
+    } catch (error) {
+      console.error("Failed to move task:", error);
+
       set({
         tasks: previousTasks,
-        notification: "Connection error: Could not save task position.",
+        notification: "Could not save task status.",
       });
     }
   },
 
-  updateTask: async (taskId, title, description, userName) => {
-    await fetch("/api/tasks/update", {
-      method: "PATCH",
+  updateTask: async (taskId, title, description, _userName) => {
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          description,
+        }),
+      });
 
-      headers: {
-        "Content-Type": "application/json",
-      },
+      const updatedTask = await readResponse<ApiTask>(response);
 
-      body: JSON.stringify({
-        taskId,
-        title,
-        description,
-        userName,
-      }),
-    });
+      set((state) => ({
+        tasks: state.tasks.map((task) =>
+          task.id === taskId ? toFrontendTask(updatedTask) : task
+        ),
+        notification: null,
+      }));
+    } catch (error) {
+      console.error("Failed to update task:", error);
+      set({ notification: "Could not update task." });
+      throw error;
+    }
   },
 
-  addTask: async (data, userName) => {
-    await fetch("/api/tasks", {
-      method: "POST",
+  initRealtime: () => {
+    // Task data now comes from the Prisma API.
+    // Supabase database subscriptions are intentionally removed.
+    // Broadcast notifications can be added back separately if needed.
+    const currentUser = Cookies.get("user-auth");
 
-      headers: {
-        "Content-Type": "application/json",
-      },
+    if (!currentUser) return;
 
-      body: JSON.stringify({
-        ...data,
-        userName,
-      }),
-    });
+    // Keep initialization safe until a notification provider is configured.
   },
 }));

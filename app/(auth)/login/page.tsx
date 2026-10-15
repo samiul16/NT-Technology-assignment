@@ -70,7 +70,7 @@ export default function LoginPage() {
       >
         <Box sx={{ maxWidth: 450, textAlign: "center", zIndex: 2 }}>
           <Typography variant="h3" fontWeight={800} gutterBottom>
-            Ray Advertising
+            NT Technology
           </Typography>
           <Typography
             variant="h6"

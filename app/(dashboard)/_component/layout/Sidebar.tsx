@@ -45,7 +45,7 @@ export default function Sidebar({ mode, user }: SidebarProps) {
         />
         <Box>
           <Typography variant="subtitle2" fontWeight={700} color="text.primary">
-            Ray Marketing
+            NT Technology
           </Typography>
           <Typography variant="caption" color="text.secondary">
             Software project

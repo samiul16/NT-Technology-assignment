@@ -1,0 +1,38 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model tasks {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title       String        @db.VarChar(200)
+  description String?
+  status      task_status   @default(TODO)
+  priority    task_priority @default(MEDIUM)
+  due_date    DateTime?     @db.Timestamptz(6)
+  user_id     String?       @db.Uuid
+  created_at  DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime      @default(now()) @db.Timestamptz(6)
+
+  @@index([user_id, due_date], map: "idx_tasks_user_due_date")
+  @@index([user_id], map: "idx_tasks_user_id")
+  @@index([user_id, status], map: "idx_tasks_user_status")
+}
+
+enum task_priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum task_status {
+  TODO
+  IN_PROGRESS
+  DONE
+}

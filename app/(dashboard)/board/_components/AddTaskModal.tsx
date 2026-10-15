@@ -1,8 +1,9 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client";
+
 import { useState, useEffect } from "react";
 import { useTaskStore } from "@/store/useTaskStore";
-import { ColumnType } from "@/types/task";
+import { ColumnType, Task } from "@/types/task";
 import Cookies from "js-cookie";
 import {
   Button,
@@ -18,7 +19,6 @@ import {
   Select,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
-import { v4 as uuidv4 } from "uuid";
 
 export default function AddTaskModal() {
   const { addTask } = useTaskStore();
@@ -37,24 +37,28 @@ export default function AddTaskModal() {
   }, []);
 
   const handleSubmit = async () => {
-    if (!title) return;
+    const trimmedTitle = title.trim();
 
-    await addTask(
-      {
-        title,
-        description,
-        status,
-        id: uuidv4(),
-        order_index: 0,
-        created_by: userName,
-      },
-      userName
-    );
+    if (!trimmedTitle) return;
 
-    setTitle("");
-    setDescription("");
-    setStatus("todo");
-    setOpen(false);
+    try {
+      await addTask(
+        {
+          title: trimmedTitle,
+          description,
+          status,
+        } as Task,
+        userName
+      );
+
+      setTitle("");
+      setDescription("");
+      setStatus("todo");
+      setOpen(false);
+    } catch {
+      // The store sets a notification when the request fails.
+      // Keep the modal open so the user can retry.
+    }
   };
 
   return (
