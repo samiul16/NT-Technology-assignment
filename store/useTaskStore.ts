@@ -27,6 +27,8 @@ interface TaskState {
 
   addTask: (data: Task, userName: string) => Promise<void>;
   initRealtime: () => void;
+
+  deleteTask: (taskId: string) => Promise<void>;
 }
 
 type ApiTask = {
@@ -198,5 +200,26 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     if (!currentUser) return;
 
     // Keep initialization safe until a notification provider is configured.
+  },
+
+  deleteTask: async (taskId) => {
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete task");
+      }
+
+      set((state) => ({
+        tasks: state.tasks.filter((task) => task.id !== taskId),
+        notification: null,
+      }));
+    } catch (error) {
+      console.error("Failed to delete task:", error);
+      set({ notification: "Could not delete task." });
+      throw error;
+    }
   },
 }));

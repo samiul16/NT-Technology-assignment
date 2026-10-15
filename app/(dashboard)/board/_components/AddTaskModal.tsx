@@ -19,6 +19,7 @@ import {
   Select,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import Toast from "../../_component/Toast";
 
 export default function AddTaskModal() {
   const { addTask } = useTaskStore();
@@ -27,6 +28,13 @@ export default function AddTaskModal() {
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<ColumnType>("todo");
   const [userName, setUserName] = useState("Anonymous");
+  const [submitting, setSubmitting] = useState(false);
+
+  const [toastOpen, setToastOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
+  const [toastSeverity, setToastSeverity] = useState<
+    "success" | "error" | "info" | "warning"
+  >("success");
 
   useEffect(() => {
     const authData = Cookies.get("user-auth");
@@ -55,9 +63,14 @@ export default function AddTaskModal() {
       setDescription("");
       setStatus("todo");
       setOpen(false);
+
+      setToastMessage("Task created successfully!");
+      setToastSeverity("success");
+      setToastOpen(true);
     } catch {
-      // The store sets a notification when the request fails.
-      // Keep the modal open so the user can retry.
+      setToastMessage("Failed to create task. Please try again.");
+      setToastSeverity("error");
+      setToastOpen(true);
     }
   };
 
@@ -114,11 +127,22 @@ export default function AddTaskModal() {
           <Button onClick={() => setOpen(false)} color="inherit">
             Cancel
           </Button>
-          <Button onClick={handleSubmit} variant="contained" disabled={!title}>
-            Create Task
+          <Button
+            onClick={handleSubmit}
+            variant="contained"
+            disabled={!title || submitting}
+          >
+            {submitting ? "Creating..." : "Create Task"}
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Toast
+        open={toastOpen}
+        message={toastMessage}
+        severity={toastSeverity}
+        onClose={() => setToastOpen(false)}
+      />
     </>
   );
 }
