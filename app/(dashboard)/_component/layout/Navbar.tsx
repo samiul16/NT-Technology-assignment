@@ -24,11 +24,12 @@ import MenuIcon from "@mui/icons-material/Menu"; // Added Menu Icon
 import { User } from "@/types/user";
 import { useTaskStore } from "@/store/useTaskStore";
 import { useDebounce } from "@/hooks/useDebounce";
+import { AuthUser } from "@/types/auth";
 
 interface NavbarProps {
   mode: "light" | "dark";
   setMode: (mode: "light" | "dark") => void;
-  user: User;
+  user: AuthUser;
   onLogout: () => void;
   onMenuClick?: () => void; // Used to open the drawer
 }

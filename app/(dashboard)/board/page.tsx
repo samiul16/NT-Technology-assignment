@@ -16,8 +16,6 @@ import { useEffect } from "react";
 export function RealtimeNotification() {
   const { notification, setNotification } = useTaskStore();
 
-  console.log("Notification in component:", notification);
-
   return (
     <Snackbar
       open={!!notification}

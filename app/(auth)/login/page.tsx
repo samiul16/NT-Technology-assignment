@@ -1,60 +1,143 @@
 "use client";
+
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import Cookies from "js-cookie";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
-  Box,
-  Typography,
-  TextField,
-  Button,
   Alert,
+  Box,
+  Button,
   CircularProgress,
-  Stack,
+  IconButton,
+  InputAdornment,
   Paper,
+  Stack,
+  TextField,
+  Typography,
 } from "@mui/material";
-import { DUMMY_USERS } from "@/data/dummy-users";
-import { User } from "@/types/user";
+import Visibility from "@mui/icons-material/Visibility";
+import VisibilityOff from "@mui/icons-material/VisibilityOff";
+import { useAuthStore } from "@/store/useAuthStore";
+
+type Mode = "signin" | "signup";
+type FieldErrors = Partial<
+  Record<"name" | "email" | "password" | "confirmPassword", string>
+>;
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("admin@rayadvertising.com");
-  const [password, setPassword] = useState("password123");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const searchParams = useSearchParams();
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
+  const signIn = useAuthStore((state) => state.signIn);
+  const signUp = useAuthStore((state) => state.signUp);
+  const isLoading = useAuthStore((state) => state.isLoading);
 
-    await new Promise((res) => setTimeout(res, 800));
+  const [mode, setMode] = useState<Mode>("signin");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState<"success" | "error" | "info">(
+    "error"
+  );
 
-    const user = DUMMY_USERS.find(
-      (u) => u.email === email && u.password === password
-    );
+  const switchMode = (nextMode: Mode) => {
+    setMode(nextMode);
+    setErrors({});
+    setMessage("");
+    setPassword("");
+    setConfirmPassword("");
+  };
 
-    if (user) {
-      Cookies.set(
-        "user-auth",
-        JSON.stringify({
-          id: user.id,
-          name: user.name,
-          role: user.role,
-          email: user.email,
-        }),
-        { expires: 7 }
+  const validate = (): boolean => {
+    const nextErrors: FieldErrors = {};
+    const normalizedEmail = email.trim();
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (mode === "signup") {
+      const trimmedName = name.trim();
+
+      if (!trimmedName) {
+        nextErrors.name = "Name is required.";
+      } else if (trimmedName.length < 2 || trimmedName.length > 120) {
+        nextErrors.name = "Name must be between 2 and 120 characters.";
+      }
+    }
+
+    if (!normalizedEmail) {
+      nextErrors.email = "Email is required.";
+    } else if (
+      normalizedEmail.length > 255 ||
+      !emailPattern.test(normalizedEmail)
+    ) {
+      nextErrors.email = "Enter a valid email address.";
+    }
+
+    if (!password) {
+      nextErrors.password = "Password is required.";
+    } else if (mode === "signup" && password.length < 8) {
+      nextErrors.password = "Password must be at least 8 characters.";
+    } else if (
+      mode === "signup" &&
+      new TextEncoder().encode(password).length > 72
+    ) {
+      nextErrors.password = "Password must not exceed 72 UTF-8 bytes.";
+    }
+
+    if (mode === "signup" && password !== confirmPassword) {
+      nextErrors.confirmPassword = "Passwords do not match.";
+    }
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setMessage("");
+
+    if (!validate()) return;
+
+    try {
+      if (mode === "signin") {
+        await signIn(email, password);
+      } else {
+        await signUp(name.trim(), email, password);
+      }
+
+      setMessage(
+        mode === "signin"
+          ? "Signed in successfully. Redirecting..."
+          : "Account created successfully. Redirecting..."
       );
-      router.push("/board");
+      setMessageType("success");
+
+      const next = searchParams.get("next");
+      const destination =
+        next?.startsWith("/") &&
+        !next.startsWith("//") &&
+        !next.startsWith("/\\")
+          ? next
+          : "/board";
+
+      router.replace(destination);
       router.refresh();
-    } else {
-      setError("Invalid email or password");
-      setLoading(false);
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to complete your request. Please try again."
+      );
+      setMessageType("error");
     }
   };
 
   return (
-    <Box sx={{ display: "flex", height: "100vh", overflow: "hidden" }}>
-      {/* LEFT SECTION: BRANDING & ILLUSTRATION (Hidden on mobile) */}
+    <Box sx={{ display: "flex", minHeight: "100vh" }}>
+      {/* Branding panel */}
       <Box
         sx={{
           flex: 1.2,
@@ -62,211 +145,293 @@ export default function LoginPage() {
           flexDirection: "column",
           justifyContent: "center",
           alignItems: "center",
-          background: "linear-gradient(135deg, #0052CC 0%, #0747A6 100%)",
-          color: "white",
-          p: 6,
           position: "relative",
+          overflow: "hidden",
+          p: 6,
+          color: "white",
+          background: "linear-gradient(135deg, #0052CC 0%, #0747A6 100%)",
         }}
       >
-        <Box sx={{ maxWidth: 450, textAlign: "center", zIndex: 2 }}>
+        <Box sx={{ maxWidth: 460, zIndex: 1 }}>
           <Typography variant="h3" fontWeight={800} gutterBottom>
             NT Technology
           </Typography>
-          <Typography
-            variant="h6"
-            sx={{ opacity: 0.8, mb: 4, fontWeight: 400 }}
-          >
-            The ultimate workspace for marketing teams to manage tasks, track
-            timelines, and deliver projects faster.
+
+          <Typography variant="h6" sx={{ opacity: 0.85, mb: 4 }}>
+            Your workspace to manage tasks, track timelines, and deliver
+            projects faster.
           </Typography>
 
-          {/* DUMMY KANBAN ILLUSTRATION */}
-          {/* DUMMY KANBAN ILLUSTRATION */}
-          <Box
+          <Paper
+            elevation={0}
             sx={{
               display: "flex",
               gap: 2,
-              bgcolor: "rgba(0,0,0,0.15)", // Darkened container for better contrast
               p: 2.5,
-              borderRadius: 4,
-              border: "1px solid rgba(255,255,255,0.1)",
-              backdropFilter: "blur(12px)",
-              boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+              borderRadius: 3,
+              bgcolor: "rgba(0,0,0,0.15)",
+              border: "1px solid rgba(255,255,255,0.15)",
             }}
           >
-            {[1, 2, 3].map((col) => (
-              <Box key={col} sx={{ flex: 1, textAlign: "left" }}>
-                {/* Gray Column Title Placeholder */}
-                <Box
-                  sx={{
-                    height: 8,
-                    width: 40,
-                    bgcolor: "rgba(255,255,255,0.2)",
-                    mb: 2,
-                    borderRadius: 1,
-                  }}
-                />
-
-                {/* Gray Task Cards */}
-                <Paper
-                  elevation={0}
-                  sx={{
-                    p: 1.5,
-                    mb: 1.5,
-                    bgcolor: "#F4F5F7", // Light "Atlassian" Gray
-                    height: 45,
-                    borderRadius: 1.5,
-                    borderLeft: "4px solid",
-                    borderColor:
-                      col === 1 ? "#FFAB00" : col === 2 ? "#36B37E" : "#0052CC", // Priority colors
-                  }}
-                />
-                <Paper
-                  elevation={0}
-                  sx={{
-                    p: 1.5,
-                    bgcolor: "#EBECF0", // Slightly darker gray for variety
-                    height: 65,
-                    borderRadius: 1.5,
-                  }}
-                />
-                <Box
-                  sx={{
-                    height: 30,
-                    mt: 1.5,
-                    bgcolor: "rgba(255,255,255,0.05)",
-                    borderRadius: 1,
-                    border: "1px dashed rgba(255,255,255,0.2)",
-                  }}
-                />
+            {[
+              { title: "To do", color: "#FFAB00" },
+              { title: "In progress", color: "#0052CC" },
+              { title: "Done", color: "#36B37E" },
+            ].map((column) => (
+              <Box key={column.title} sx={{ flex: 1, minWidth: 0 }}>
+                <Typography
+                  variant="caption"
+                  sx={{ color: "white", fontWeight: 700 }}
+                >
+                  {column.title}
+                </Typography>
+                {[1, 2].map((item) => (
+                  <Box
+                    key={item}
+                    sx={{
+                      mt: 1.5,
+                      height: item === 1 ? 65 : 45,
+                      bgcolor: "#F4F5F7",
+                      borderRadius: 1.5,
+                      borderLeft: `4px solid ${column.color}`,
+                    }}
+                  />
+                ))}
               </Box>
             ))}
-          </Box>
+          </Paper>
         </Box>
 
-        {/* Decorative Background Elements */}
         <Box
           sx={{
             position: "absolute",
-            top: -50,
-            left: -50,
-            width: 200,
-            height: 200,
+            width: 240,
+            height: 240,
             borderRadius: "50%",
             bgcolor: "rgba(255,255,255,0.05)",
-          }}
-        />
-        <Box
-          sx={{
-            position: "absolute",
-            bottom: 20,
-            right: 20,
-            width: 150,
-            height: 150,
-            borderRadius: "50%",
-            bgcolor: "rgba(255,255,255,0.05)",
+            top: -80,
+            left: -80,
           }}
         />
       </Box>
 
-      {/* RIGHT SECTION: LOGIN FORM */}
+      {/* Authentication panel */}
       <Box
         sx={{
           flex: 1,
           display: "flex",
-          flexDirection: "column",
           justifyContent: "center",
           alignItems: "center",
           bgcolor: "background.default",
-          p: 4,
+          p: { xs: 2.5, sm: 4 },
         }}
       >
-        <Box sx={{ width: "100%", maxWidth: 400 }}>
-          <Stack spacing={1} sx={{ mb: 4 }}>
-            <Typography variant="h4" fontWeight={700} color="text.primary">
-              Welcome back
+        <Box sx={{ width: "100%", maxWidth: 420 }}>
+          <Stack spacing={1} sx={{ mb: 3 }}>
+            <Typography variant="h4" fontWeight={700}>
+              {mode === "signin" ? "Welcome back" : "Create your account"}
             </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Enter your credentials to access your project dashboard.
+            <Typography color="text.secondary">
+              {mode === "signin"
+                ? "Sign in to access your project dashboard."
+                : "Enter your details to get started."}
             </Typography>
           </Stack>
 
-          {error && (
-            <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
-              {error}
+          <Box
+            sx={{
+              display: "flex",
+              p: 0.5,
+              mb: 3,
+              bgcolor: "action.hover",
+              borderRadius: 2,
+              gap: 0.5,
+            }}
+          >
+            <Button
+              fullWidth
+              variant={mode === "signin" ? "contained" : "text"}
+              onClick={() => switchMode("signin")}
+              disabled={isLoading}
+              sx={{ textTransform: "none", borderRadius: 1.5 }}
+            >
+              Sign In
+            </Button>
+            <Button
+              fullWidth
+              variant={mode === "signup" ? "contained" : "text"}
+              onClick={() => switchMode("signup")}
+              disabled={isLoading}
+              sx={{ textTransform: "none", borderRadius: 1.5 }}
+            >
+              Sign Up
+            </Button>
+          </Box>
+
+          {message && (
+            <Alert severity={messageType} sx={{ mb: 2, borderRadius: 2 }}>
+              {message}
             </Alert>
           )}
 
-          <form onSubmit={handleLogin}>
-            <Stack spacing={2.5}>
+          <Box component="form" onSubmit={handleSubmit} noValidate>
+            <Stack spacing={2.2}>
+              {mode === "signup" && (
+                <TextField
+                  fullWidth
+                  label="Full Name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  error={Boolean(errors.name)}
+                  helperText={errors.name || " "}
+                  autoComplete="name"
+                  disabled={isLoading}
+                  inputProps={{ maxLength: 120 }}
+                />
+              )}
+
               <TextField
                 fullWidth
                 label="Email Address"
-                variant="outlined"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                InputProps={{ sx: { borderRadius: 2 } }}
+                onChange={(event) => setEmail(event.target.value)}
+                error={Boolean(errors.email)}
+                helperText={errors.email || " "}
+                autoComplete="email"
+                disabled={isLoading}
+                inputProps={{ maxLength: 255 }}
               />
+
               <TextField
                 fullWidth
                 label="Password"
-                type="password"
-                variant="outlined"
+                type={showPassword ? "text" : "password"}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                InputProps={{ sx: { borderRadius: 2 } }}
+                onChange={(event) => setPassword(event.target.value)}
+                error={Boolean(errors.password)}
+                helperText={
+                  errors.password ||
+                  (mode === "signup" ? "At least 8 characters." : " ")
+                }
+                autoComplete={
+                  mode === "signin" ? "current-password" : "new-password"
+                }
+                disabled={isLoading}
+                slotProps={{
+                  input: {
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          aria-label={
+                            showPassword ? "Hide password" : "Show password"
+                          }
+                          onClick={() => setShowPassword((value) => !value)}
+                          edge="end"
+                          disabled={isLoading}
+                        >
+                          {showPassword ? <VisibilityOff /> : <Visibility />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  },
+                }}
               />
 
-              <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
-                <Typography
-                  variant="caption"
-                  color="primary"
-                  sx={{ cursor: "pointer", fontWeight: 600 }}
-                >
-                  Forgot password?
-                </Typography>
-              </Box>
+              {mode === "signup" && (
+                <TextField
+                  fullWidth
+                  label="Confirm Password"
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  error={Boolean(errors.confirmPassword)}
+                  helperText={errors.confirmPassword || " "}
+                  autoComplete="new-password"
+                  disabled={isLoading}
+                  slotProps={{
+                    input: {
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            aria-label={
+                              showConfirmPassword
+                                ? "Hide confirm password"
+                                : "Show confirm password"
+                            }
+                            onClick={() =>
+                              setShowConfirmPassword((value) => !value)
+                            }
+                            edge="end"
+                            disabled={isLoading}
+                          >
+                            {showConfirmPassword ? (
+                              <VisibilityOff />
+                            ) : (
+                              <Visibility />
+                            )}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    },
+                  }}
+                />
+              )}
 
               <Button
                 fullWidth
                 variant="contained"
                 type="submit"
                 size="large"
-                disabled={loading}
+                disabled={isLoading}
                 sx={{
                   py: 1.5,
                   borderRadius: 2,
                   textTransform: "none",
                   fontSize: "1rem",
                   fontWeight: 600,
-                  boxShadow: "0 4px 12px rgba(0, 82, 204, 0.2)",
                 }}
               >
-                {loading ? (
+                {isLoading ? (
                   <CircularProgress size={24} color="inherit" />
-                ) : (
+                ) : mode === "signin" ? (
                   "Sign In"
+                ) : (
+                  "Create Account"
                 )}
               </Button>
             </Stack>
-          </form>
-
-          <Box sx={{ mt: 4, textAlign: "center" }}>
-            <Typography variant="body2" color="text.secondary">
-              Don&apos;t have an account?{" "}
-              <Typography
-                component="span"
-                variant="body2"
-                color="primary"
-                sx={{ cursor: "pointer", fontWeight: 600 }}
-              >
-                Contact Admin
-              </Typography>
-            </Typography>
           </Box>
+
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            textAlign="center"
+            sx={{ mt: 3 }}
+          >
+            {mode === "signin"
+              ? "Don't have an account?"
+              : "Already have an account?"}{" "}
+            <Box
+              component="button"
+              type="button"
+              onClick={() =>
+                switchMode(mode === "signin" ? "signup" : "signin")
+              }
+              disabled={isLoading}
+              sx={{
+                border: 0,
+                p: 0,
+                bgcolor: "transparent",
+                color: "primary.main",
+                font: "inherit",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              {mode === "signin" ? "Sign up" : "Sign in"}
+            </Box>
+          </Typography>
         </Box>
       </Box>
     </Box>

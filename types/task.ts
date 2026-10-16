@@ -11,7 +11,7 @@ export interface Task {
   status: ColumnType;
 
   // Frontend ordering; persistence requires a database column.
-  order_index: number;
+  order_index?: number;
 
   // Legacy UI field; not currently stored in the PostgreSQL table.
   created_by: string;
@@ -20,6 +20,14 @@ export interface Task {
   due_date?: string | null;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface CreateTaskRequest {
+  title: string;
+  description: string;
+  status: ColumnType;
+  priority?: TaskPriority;
+  due_date?: string | null;
 }
 
 export function toApiStatus(status: ColumnType): ApiTaskStatus {

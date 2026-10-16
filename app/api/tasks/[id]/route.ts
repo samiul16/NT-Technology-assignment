@@ -1,89 +1,90 @@
-import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
-
-const STATUSES = ["TODO", "IN_PROGRESS", "DONE"] as const;
-const PRIORITIES = ["LOW", "MEDIUM", "HIGH"] as const;
+import { prisma } from "@/lib/prisma";
+import { getAuthenticatedUser } from "@/lib/auth";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
-function isValidId(id: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-    id
-  );
-}
+const validStatuses = ["TODO", "IN_PROGRESS", "DONE"];
+const validPriorities = ["LOW", "MEDIUM", "HIGH"];
 
-function invalidIdResponse() {
-  return NextResponse.json(
-    { success: false, message: "Invalid task ID" },
-    { status: 400 }
-  );
-}
-
-function notFoundResponse() {
-  return NextResponse.json(
-    { success: false, message: "Task not found" },
-    { status: 404 }
-  );
-}
-
-// GET /api/tasks/:id
-export async function GET(_request: Request, { params }: RouteContext) {
-  const { id } = await params;
-
-  if (!isValidId(id)) return invalidIdResponse();
-
+export async function GET(_req: Request, { params }: RouteContext) {
   try {
-    const task = await prisma.tasks.findUnique({
+    const user = await getAuthenticatedUser();
+
+    if (!user) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const { id } = await params;
+
+    const task = await prisma.tasks.findFirst({
       where: { id },
     });
 
-    if (!task) return notFoundResponse();
+    if (!task) {
+      return NextResponse.json(
+        { success: false, message: "Task not found." },
+        { status: 404 }
+      );
+    }
 
-    return NextResponse.json({ success: true, data: task });
+    return NextResponse.json({ success: true, task });
   } catch (error) {
-    console.error("Failed to fetch task:", error);
+    console.error("GET /api/tasks/[id] error:", error);
 
     return NextResponse.json(
-      { success: false, message: "Failed to fetch task" },
+      { success: false, message: "Failed to fetch task." },
       { status: 500 }
     );
   }
 }
 
-// PATCH /api/tasks/:id
-export async function PATCH(request: Request, { params }: RouteContext) {
-  const { id } = await params;
-
-  if (!isValidId(id)) return invalidIdResponse();
-
+export async function PATCH(req: Request, { params }: RouteContext) {
   try {
-    const body = await request.json();
+    const user = await getAuthenticatedUser();
 
-    if (!body || typeof body !== "object" || Array.isArray(body)) {
+    if (!user) {
       return NextResponse.json(
-        { success: false, message: "Invalid request body" },
-        { status: 400 }
+        { success: false, message: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const { id } = await params;
+    const body = await req.json();
+
+    const existingTask = await prisma.tasks.findFirst({
+      where: { id },
+    });
+
+    if (!existingTask) {
+      return NextResponse.json(
+        { success: false, message: "Task not found or access denied." },
+        { status: 404 }
       );
     }
 
     const data: {
       title?: string;
       description?: string | null;
-      status?: (typeof STATUSES)[number];
-      priority?: (typeof PRIORITIES)[number];
+      status?: "TODO" | "IN_PROGRESS" | "DONE";
+      priority?: "LOW" | "MEDIUM" | "HIGH";
       due_date?: Date | null;
     } = {};
 
-    if ("title" in body) {
+    if (body.title !== undefined) {
       if (
         typeof body.title !== "string" ||
-        body.title.trim().length === 0 ||
+        !body.title.trim() ||
         body.title.trim().length > 200
       ) {
         return NextResponse.json(
-          { success: false, message: "Title must be 1–200 characters" },
+          { success: false, message: "Invalid task title." },
           { status: 400 }
         );
       }
@@ -91,20 +92,10 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       data.title = body.title.trim();
     }
 
-    if ("description" in body) {
+    if (body.description !== undefined) {
       if (body.description !== null && typeof body.description !== "string") {
         return NextResponse.json(
-          { success: false, message: "Description must be a string or null" },
-          { status: 400 }
-        );
-      }
-
-      if (
-        typeof body.description === "string" &&
-        body.description.length > 10000
-      ) {
-        return NextResponse.json(
-          { success: false, message: "Description is too long" },
+          { success: false, message: "Invalid task description." },
           { status: 400 }
         );
       }
@@ -112,10 +103,10 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       data.description = body.description;
     }
 
-    if ("status" in body) {
-      if (!STATUSES.includes(body.status)) {
+    if (body.status !== undefined) {
+      if (!validStatuses.includes(body.status)) {
         return NextResponse.json(
-          { success: false, message: "Invalid task status" },
+          { success: false, message: "Invalid task status." },
           { status: 400 }
         );
       }
@@ -123,10 +114,10 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       data.status = body.status;
     }
 
-    if ("priority" in body) {
-      if (!PRIORITIES.includes(body.priority)) {
+    if (body.priority !== undefined) {
+      if (!validPriorities.includes(body.priority)) {
         return NextResponse.json(
-          { success: false, message: "Invalid task priority" },
+          { success: false, message: "Invalid task priority." },
           { status: 400 }
         );
       }
@@ -134,87 +125,72 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       data.priority = body.priority;
     }
 
-    if ("due_date" in body) {
-      if (body.due_date === null) {
+    if (body.due_date !== undefined) {
+      if (body.due_date === null || body.due_date === "") {
         data.due_date = null;
-      } else if (
-        typeof body.due_date === "string" &&
-        body.due_date.trim() !== "" &&
-        !Number.isNaN(Date.parse(body.due_date))
-      ) {
-        data.due_date = new Date(body.due_date);
       } else {
-        return NextResponse.json(
-          { success: false, message: "Invalid due date" },
-          { status: 400 }
-        );
+        const date = new Date(body.due_date);
+
+        if (Number.isNaN(date.getTime())) {
+          return NextResponse.json(
+            { success: false, message: "Invalid due date." },
+            { status: 400 }
+          );
+        }
+
+        data.due_date = date;
       }
     }
-
-    if (Object.keys(data).length === 0) {
-      return NextResponse.json(
-        { success: false, message: "No valid fields provided to update" },
-        { status: 400 }
-      );
-    }
-
-    const existingTask = await prisma.tasks.findUnique({
-      where: { id },
-      select: { id: true },
-    });
-
-    if (!existingTask) return notFoundResponse();
 
     const task = await prisma.tasks.update({
       where: { id },
       data,
     });
 
-    return NextResponse.json({ success: true, data: task });
+    return NextResponse.json({ success: true, task });
   } catch (error) {
-    if (error instanceof SyntaxError) {
-      return NextResponse.json(
-        { success: false, message: "Invalid JSON body" },
-        { status: 400 }
-      );
-    }
-
-    console.error("Failed to update task:", error);
+    console.error("PATCH /api/tasks/[id] error:", error);
 
     return NextResponse.json(
-      { success: false, message: "Failed to update task" },
+      { success: false, message: "Failed to update task." },
       { status: 500 }
     );
   }
 }
 
-// DELETE /api/tasks/:id
-export async function DELETE(_request: Request, { params }: RouteContext) {
-  const { id } = await params;
-
-  if (!isValidId(id)) return invalidIdResponse();
-
+export async function DELETE(_req: Request, { params }: RouteContext) {
   try {
-    const existingTask = await prisma.tasks.findUnique({
+    const user = await getAuthenticatedUser();
+
+    if (!user) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const { id } = await params;
+
+    const result = await prisma.tasks.deleteMany({
       where: { id },
-      select: { id: true },
     });
 
-    if (!existingTask) return notFoundResponse();
-
-    await prisma.tasks.delete({
-      where: { id },
-    });
+    if (result.count === 0) {
+      return NextResponse.json(
+        { success: false, message: "Task not found or access denied." },
+        { status: 404 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
-      message: "Task deleted successfully",
+      message: "Task deleted successfully.",
     });
   } catch (error) {
-    console.error("Failed to delete task:", error);
+    console.error("DELETE /api/tasks/[id] error:", error);
 
     return NextResponse.json(
-      { success: false, message: "Failed to delete task" },
+      { success: false, message: "Failed to delete task." },
       { status: 500 }
     );
   }

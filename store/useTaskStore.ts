@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { Task, ColumnType } from "@/types/task";
+import { Task, ColumnType, CreateTaskRequest } from "@/types/task";
 import Cookies from "js-cookie";
 
 interface TaskState {
@@ -22,10 +22,11 @@ interface TaskState {
     taskId: string,
     title: string,
     description: string,
-    userName: string
+    priority: string,
+    dueDate: string | null
   ) => Promise<void>;
 
-  addTask: (data: Task, userName: string) => Promise<void>;
+  addTask: (data: CreateTaskRequest, userName: string) => Promise<void>;
   initRealtime: () => void;
 
   deleteTask: (taskId: string) => Promise<void>;
@@ -73,13 +74,22 @@ const toFrontendTask = (task: ApiTask): Task =>
   } as Task);
 
 async function readResponse<T>(response: Response): Promise<T> {
-  const result = (await response.json()) as ApiResponse<T>;
+  const result = (await response.json()) as ApiResponse<T> & {
+    task?: T;
+    tasks?: T;
+  };
 
-  if (!response.ok || !result.success || result.data === undefined) {
+  if (!response.ok || !result.success) {
     throw new Error(result.message ?? "Task request failed");
   }
 
-  return result.data;
+  const data = result.data ?? result.task ?? result.tasks;
+
+  if (data === undefined) {
+    throw new Error("The API response does not contain task data.");
+  }
+
+  return data;
 }
 
 export const useTaskStore = create<TaskState>((set, get) => ({
@@ -113,6 +123,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
           description: data.description || null,
           status: toApiStatus(data.status),
           priority: "MEDIUM",
+          due_date: data.due_date || null,
         }),
       });
 
@@ -165,14 +176,20 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }
   },
 
-  updateTask: async (taskId, title, description, _userName) => {
+  updateTask: async (taskId, title, description, priority, dueDate) => {
     try {
       const response = await fetch(`/api/tasks/${taskId}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           title,
           description,
+          priority: priority.toUpperCase(),
+          due_date: dueDate
+            ? new Date(`${dueDate}T12:00:00`).toISOString()
+            : null,
         }),
       });
 
@@ -186,7 +203,11 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       }));
     } catch (error) {
       console.error("Failed to update task:", error);
-      set({ notification: "Could not update task." });
+
+      set({
+        notification: "Could not update task.",
+      });
+
       throw error;
     }
   },

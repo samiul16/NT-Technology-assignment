@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { useTaskStore } from "@/store/useTaskStore";
-import { ColumnType, Task } from "@/types/task";
+import { ColumnType, CreateTaskRequest, Task } from "@/types/task";
 import Cookies from "js-cookie";
 import {
   Button,
@@ -20,15 +20,21 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import Toast from "../../_component/Toast";
+import TaskDescriptionAI from "./TaskDescriptionAI";
+
+type Priority = "low" | "medium" | "high";
 
 export default function AddTaskModal() {
   const { addTask } = useTaskStore();
+
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<ColumnType>("todo");
+  const [priority, setPriority] = useState<Priority>("medium");
   const [userName, setUserName] = useState("Anonymous");
   const [submitting, setSubmitting] = useState(false);
+  const [dueDate, setDueDate] = useState("");
 
   const [toastOpen, setToastOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
@@ -38,16 +44,23 @@ export default function AddTaskModal() {
 
   useEffect(() => {
     const authData = Cookies.get("user-auth");
+
     if (authData) {
-      const user = JSON.parse(authData);
-      setUserName(user.name); // Get actual user name
+      try {
+        const user = JSON.parse(authData);
+        setUserName(user.name ?? "Anonymous");
+      } catch {
+        setUserName("Anonymous");
+      }
     }
   }, []);
 
   const handleSubmit = async () => {
     const trimmedTitle = title.trim();
 
-    if (!trimmedTitle) return;
+    if (!trimmedTitle || submitting) return;
+
+    setSubmitting(true);
 
     try {
       await addTask(
@@ -55,13 +68,16 @@ export default function AddTaskModal() {
           title: trimmedTitle,
           description,
           status,
-        } as Task,
+          priority: priority.toUpperCase() as "LOW" | "MEDIUM" | "HIGH",
+          due_date: dueDate,
+        },
         userName
       );
 
       setTitle("");
       setDescription("");
       setStatus("todo");
+      setPriority("medium");
       setOpen(false);
 
       setToastMessage("Task created successfully!");
@@ -71,6 +87,8 @@ export default function AddTaskModal() {
       setToastMessage("Failed to create task. Please try again.");
       setToastSeverity("error");
       setToastOpen(true);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -87,28 +105,44 @@ export default function AddTaskModal() {
 
       <Dialog
         open={open}
-        onClose={() => setOpen(false)}
+        onClose={() => {
+          if (!submitting) setOpen(false);
+        }}
         fullWidth
         maxWidth="xs"
       >
         <DialogTitle sx={{ fontWeight: 700 }}>Create New Task</DialogTitle>
+
         <DialogContent>
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 2,
+              mt: 1,
+            }}
+          >
             <TextField
               label="Task Title"
               fullWidth
               autoFocus
+              required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
+
+            <TaskDescriptionAI title={title} onAccept={setDescription} />
+
             <TextField
-              label="Description"
+              label="Task Description"
               fullWidth
               multiline
-              rows={3}
+              rows={4}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              placeholder="Enter a description or generate one with AI..."
             />
+
             <FormControl fullWidth>
               <InputLabel>Status</InputLabel>
               <Select
@@ -121,16 +155,45 @@ export default function AddTaskModal() {
                 <MenuItem value="done">Done</MenuItem>
               </Select>
             </FormControl>
+
+            <FormControl fullWidth>
+              <InputLabel>Priority</InputLabel>
+              <Select
+                value={priority}
+                label="Priority"
+                onChange={(e) => setPriority(e.target.value as Priority)}
+              >
+                <MenuItem value="low">Low</MenuItem>
+                <MenuItem value="medium">Medium</MenuItem>
+                <MenuItem value="high">High</MenuItem>
+              </Select>
+            </FormControl>
+
+            {/* Due date field */}
+            <TextField
+              label="Due Date"
+              type="date"
+              fullWidth
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+            />
           </Box>
         </DialogContent>
+
         <DialogActions sx={{ p: 3 }}>
-          <Button onClick={() => setOpen(false)} color="inherit">
+          <Button
+            onClick={() => setOpen(false)}
+            color="inherit"
+            disabled={submitting}
+          >
             Cancel
           </Button>
+
           <Button
             onClick={handleSubmit}
             variant="contained"
-            disabled={!title || submitting}
+            disabled={!title.trim() || submitting}
           >
             {submitting ? "Creating..." : "Create Task"}
           </Button>

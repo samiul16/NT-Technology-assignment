@@ -1,8 +1,7 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
+
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Cookies from "js-cookie";
 import {
   ThemeProvider,
   createTheme,
@@ -10,10 +9,13 @@ import {
   Box,
   GlobalStyles,
   Drawer,
+  CircularProgress,
+  Typography,
 } from "@mui/material";
+
 import Sidebar from "@/app/(dashboard)/_component/layout/Sidebar";
 import Navbar from "@/app/(dashboard)/_component/layout/Navbar";
-import { User } from "@/types/user";
+import { useAuthStore } from "@/store/useAuthStore";
 
 export default function DashboardLayout({
   children,
@@ -21,29 +23,35 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+
+  const user = useAuthStore((state) => state.user);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const initialized = useAuthStore((state) => state.initialized);
+  const checkAuth = useAuthStore((state) => state.checkAuth);
+  const signOut = useAuthStore((state) => state.signOut);
+
   const [mode, setMode] = useState<"light" | "dark">("light");
-  const [mounted, setMounted] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
-  const [mobileOpen, setMobileOpen] = useState(false); // Mobile state
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
-    const session = Cookies.get("user-auth");
-    if (!session) {
-      router.push("/login");
-    } else {
-      setUser(JSON.parse(session));
+    if (!initialized) {
+      void checkAuth();
     }
-  }, [router]);
+  }, [initialized, checkAuth]);
+
+  useEffect(() => {
+    if (initialized && !isAuthenticated) {
+      router.replace("/login");
+    }
+  }, [initialized, isAuthenticated, router]);
 
   const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen);
+    setMobileOpen((previous) => !previous);
   };
 
-  const handleLogout = () => {
-    Cookies.remove("user-auth");
-    router.push("/login");
-    router.refresh();
+  const handleLogout = async () => {
+    await signOut();
+    router.replace("/login");
   };
 
   const theme = useMemo(
@@ -62,7 +70,31 @@ export default function DashboardLayout({
     [mode]
   );
 
-  if (!mounted || !user) return null;
+  // Show a loading state instead of a blank page while checking authentication.
+  if (!initialized || !isAuthenticated || !user) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Box
+          sx={{
+            minHeight: "100vh",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 2,
+          }}
+        >
+          <CircularProgress />
+          <Typography color="text.secondary">
+            {!initialized
+              ? "Checking your session..."
+              : "Redirecting to login..."}
+          </Typography>
+        </Box>
+      </ThemeProvider>
+    );
+  }
 
   return (
     <ThemeProvider theme={theme}>
@@ -70,12 +102,12 @@ export default function DashboardLayout({
       <GlobalStyles styles={{ ".MuiDialog-root": { zIndex: 9999 } }} />
 
       <Box sx={{ display: "flex", height: "100vh", overflow: "hidden" }}>
-        {/* MOBILE SIDEBAR (Drawer) */}
+        {/* Mobile sidebar */}
         <Drawer
           variant="temporary"
           open={mobileOpen}
           onClose={handleDrawerToggle}
-          ModalProps={{ keepMounted: true }} // Better open performance on mobile
+          ModalProps={{ keepMounted: true }}
           sx={{
             display: { xs: "block", md: "none" },
             "& .MuiDrawer-paper": { width: 240 },
@@ -84,7 +116,7 @@ export default function DashboardLayout({
           <Sidebar mode={mode} user={user} />
         </Drawer>
 
-        {/* DESKTOP SIDEBAR */}
+        {/* Desktop sidebar */}
         <Box sx={{ display: { xs: "none", md: "block" } }}>
           <Sidebar mode={mode} user={user} />
         </Box>
@@ -102,12 +134,13 @@ export default function DashboardLayout({
             setMode={setMode}
             user={user}
             onLogout={handleLogout}
-            onMenuClick={handleDrawerToggle} // Pass toggle to Navbar
+            onMenuClick={handleDrawerToggle}
           />
 
           <Box
             sx={{
               flex: 1,
+              minHeight: 0,
               overflow: "hidden",
               display: "flex",
               flexDirection: "column",

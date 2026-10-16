@@ -1,10 +1,10 @@
 "use client";
 import { Box, Typography } from "@mui/material";
-import { User } from "@/types/user";
+import { AuthUser } from "@/types/auth";
 
 interface SidebarProps {
   mode: "light" | "dark";
-  user: User;
+  user: AuthUser;
 }
 
 const MENU_ITEMS = [
@@ -16,9 +16,9 @@ const MENU_ITEMS = [
 ];
 
 export default function Sidebar({ mode, user }: SidebarProps) {
-  const visibleItems = MENU_ITEMS.filter((item) =>
-    item.roles.includes(user.role)
-  );
+  const visibleItems = MENU_ITEMS.filter((item) => {
+    return item.roles.includes(user.role);
+  });
 
   return (
     <Box
