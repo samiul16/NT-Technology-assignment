@@ -1,42 +1,66 @@
-import { NextResponse } from "next/server";
-// Fix: Import from 'next/server' instead of 'next/request'
-import type { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { jwtVerify } from "jose";
 
-export function middleware(request: NextRequest) {
-  const userSession = request.cookies.get("user-auth");
+const COOKIE_NAME = "auth-token";
+
+async function isAuthenticated(request: NextRequest): Promise<boolean> {
+  const token = request.cookies.get(COOKIE_NAME)?.value;
+  const secret = process.env.JWT_SECRET;
+
+  if (!token || !secret || secret.length < 32) {
+    return false;
+  }
+
+  try {
+    const { payload } = await jwtVerify(
+      token,
+      new TextEncoder().encode(secret),
+      { algorithms: ["HS256"] }
+    );
+
+    return (
+      typeof payload.sub === "string" &&
+      typeof payload.name === "string" &&
+      typeof payload.email === "string" &&
+      typeof payload.role === "string"
+    );
+  } catch {
+    return false;
+  }
+}
+
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const authenticated = await isAuthenticated(request);
 
-  // 1. If user is logged in and tries to access /login, redirect to /board
-  if (userSession && pathname === "/login") {
+  const isLoginPage = pathname === "/login";
+  const isSignupPage = pathname === "/signup";
+  const isAuthPage = isLoginPage || isSignupPage;
+  const isDashboardPage =
+    pathname === "/board" || pathname.startsWith("/board/");
+
+  // Authenticated users should not revisit login or signup.
+  if (authenticated && isAuthPage) {
     return NextResponse.redirect(new URL("/board", request.url));
   }
 
-  // 2. If user is NOT logged in and tries to access /board (or any dashboard subpage)
-  // We allow access to /login to prevent infinite loops
-  if (!userSession && pathname.startsWith("/board")) {
-    return NextResponse.redirect(new URL("/login", request.url));
+  // Protect the board and its nested pages.
+  if (!authenticated && isDashboardPage) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("next", pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
-  // 3. Optional: Redirect root "/" to "/board" if logged in, or "/login" if not
+  // Redirect the root page based on authentication.
   if (pathname === "/") {
     return NextResponse.redirect(
-      new URL(userSession ? "/board" : "/login", request.url)
+      new URL(authenticated ? "/board" : "/login", request.url)
     );
   }
 
   return NextResponse.next();
 }
 
-// Ensure the middleware doesn't run on static assets or icons
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
-    "/((?!api|_next/static|_next/image|favicon.ico).*)",
-  ],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)"],
 };
