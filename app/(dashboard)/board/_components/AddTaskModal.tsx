@@ -21,6 +21,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import Toast from "../../_component/Toast";
 import TaskDescriptionAI from "./TaskDescriptionAI";
+import TaskDuplicateChecker from "./TaskDuplicateChecker";
 
 type Priority = "low" | "medium" | "high";
 
@@ -55,7 +56,7 @@ export default function AddTaskModal() {
     }
   }, []);
 
-  const handleSubmit = async () => {
+  const handleCreateTask = async () => {
     const trimmedTitle = title.trim();
 
     if (!trimmedTitle || submitting) return;
@@ -109,7 +110,7 @@ export default function AddTaskModal() {
           if (!submitting) setOpen(false);
         }}
         fullWidth
-        maxWidth="xs"
+        maxWidth="sm"
       >
         <DialogTitle sx={{ fontWeight: 700 }}>Create New Task</DialogTitle>
 
@@ -190,13 +191,12 @@ export default function AddTaskModal() {
             Cancel
           </Button>
 
-          <Button
-            onClick={handleSubmit}
-            variant="contained"
+          <TaskDuplicateChecker
+            title={title}
+            description={description}
+            onContinue={handleCreateTask}
             disabled={!title.trim() || submitting}
-          >
-            {submitting ? "Creating..." : "Create Task"}
-          </Button>
+          />
         </DialogActions>
       </Dialog>
 

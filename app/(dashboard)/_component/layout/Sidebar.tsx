@@ -8,11 +8,11 @@ interface SidebarProps {
 }
 
 const MENU_ITEMS = [
-  { label: "Kanban board", roles: ["admin", "manager", "user"] },
-  { label: "Tasks", roles: ["admin", "manager"] },
-  { label: "Timeline", roles: ["admin", "manager"] },
-  { label: "Issues", roles: ["admin"] },
-  { label: "Settings", roles: ["admin"] },
+  { label: "Kanban board", roles: ["ADMIN", "MANAGER", "USER"] },
+  { label: "Tasks", roles: ["ADMIN", "MANAGER"] },
+  { label: "Timeline", roles: ["ADMIN", "MANAGER"] },
+  { label: "Issues", roles: ["ADMIN"] },
+  { label: "Settings", roles: ["ADMIN"] },
 ];
 
 export default function Sidebar({ mode, user }: SidebarProps) {
