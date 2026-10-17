@@ -305,7 +305,7 @@ POST /api/tasks
 ### Move Task
 
 ```
-PATCH /api/tasks/move
+PATCH /api/tasks/id
 ```
 
 Used for:
@@ -319,7 +319,7 @@ Used for:
 ### Update Task
 
 ```
-PATCH /api/tasks/update
+PATCH /api/tasks/id
 ```
 
 Used for:
@@ -332,7 +332,7 @@ Used for:
 ### Delete Task
 
 ```
-DELETE /api/tasks/delete
+DELETE /api/tasks/id
 ```
 
 Used for:

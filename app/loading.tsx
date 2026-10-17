@@ -1,10 +1,5 @@
 "use client";
-import {
-  Box,
-  CircularProgress,
-  Typography,
-  LinearProgress,
-} from "@mui/material";
+import { Box, Typography, LinearProgress } from "@mui/material";
 
 export default function Loading() {
   return (
