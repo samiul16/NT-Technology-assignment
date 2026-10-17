@@ -228,7 +228,7 @@ export default function LoginPage() {
       >
         <Box sx={{ width: "100%", maxWidth: 420 }}>
           <Stack spacing={1} sx={{ mb: 3 }}>
-            <Typography variant="h4" fontWeight={700}>
+            <Typography variant="h4" fontWeight={700} color="text.primary">
               {mode === "signin" ? "Welcome back" : "Create your account"}
             </Typography>
             <Typography color="text.secondary">
