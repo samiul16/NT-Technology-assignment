@@ -94,7 +94,7 @@ export default function Board() {
 
       const columnTasks = tasks
         .filter((t) => t.status === newStatus)
-        .sort((a, b) => a.order_index - b.order_index);
+        .sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
 
       targetIndex = columnTasks.length;
     } else {
@@ -106,7 +106,7 @@ export default function Board() {
 
       const columnTasks = tasks
         .filter((t) => t.status === newStatus)
-        .sort((a, b) => a.order_index - b.order_index);
+        .sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
 
       targetIndex = columnTasks.findIndex((t) => t.id === overId);
 
@@ -140,22 +140,23 @@ export default function Board() {
     // Calculate the new position
     const sortedColumnTasks = tasks
       .filter((t) => t.status === newStatus && t.id !== activeId)
-      .sort((a, b) => a.order_index - b.order_index);
+      .sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
 
     let newOrderIndex: number;
 
     if (sortedColumnTasks.length === 0) {
       newOrderIndex = 1000;
     } else if (targetIndex <= 0) {
-      newOrderIndex = sortedColumnTasks[0].order_index / 2;
+      newOrderIndex = (sortedColumnTasks[0].order_index || 0) / 2;
     } else if (targetIndex >= sortedColumnTasks.length) {
       newOrderIndex =
-        sortedColumnTasks[sortedColumnTasks.length - 1].order_index + 1000;
+        (sortedColumnTasks[sortedColumnTasks.length - 1].order_index || 0) +
+        1000;
     } else {
       const prev = sortedColumnTasks[targetIndex - 1];
       const next = sortedColumnTasks[targetIndex];
 
-      newOrderIndex = (prev.order_index + next.order_index) / 2;
+      newOrderIndex = ((prev.order_index || 0) + (next.order_index || 0)) / 2;
     }
 
     const session = Cookies.get("user-auth");

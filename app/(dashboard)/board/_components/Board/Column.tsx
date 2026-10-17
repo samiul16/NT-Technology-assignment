@@ -33,7 +33,9 @@ export default function Column({ columnId, title, tasks }: ColumnProps) {
     () =>
       tasks
         .filter((t: Task) => t.status === columnId)
-        .sort((a: Task, b: Task) => a.order_index - b.order_index),
+        .sort(
+          (a: Task, b: Task) => (a.order_index || 0) - (b.order_index || 0)
+        ),
     [tasks, columnId]
   );
 
